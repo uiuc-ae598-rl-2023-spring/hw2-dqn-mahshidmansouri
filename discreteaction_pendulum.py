@@ -107,7 +107,7 @@ class Pendulum():
 
         # Reset current time (expressed as number of simulation steps taken so far) to zero
         self.num_steps = 0
-
+        
         return self.s
 
     def video(self, policy, filename='pendulum.gif', writer='imagemagick'):
