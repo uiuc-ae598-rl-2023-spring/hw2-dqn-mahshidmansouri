@@ -2,7 +2,8 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import discreteaction_pendulum
-
+import PIL 
+from PIL import Image
 
 def main():
     # Create environment
@@ -66,7 +67,6 @@ def main():
     thetadot = data['s'][:, 1]
     tau = [env._a_to_u(a) for a in data['a']]
 
-    # Plot data and save to png file
     fig, ax = plt.subplots(3, 1, figsize=(10, 10))
     ax[0].plot(data['t'], theta, label='theta')
     ax[0].plot(data['t'], thetadot, label='thetadot')

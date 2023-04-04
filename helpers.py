@@ -6,17 +6,13 @@ AE 598-Spring 2023-HW2: DQN implementation
 
 """
 
-import numpy as np
 import torch
 import torch.nn as nn
-import math 
+import torch.nn.functional as F
 from collections import namedtuple, deque
 import random
-import scipy.integrate
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 
-
+    
 ## Define a class for the experience replay 
 class ReplayMemory(object):
     
@@ -36,7 +32,7 @@ class ReplayMemory(object):
     def push(self, *args):
         """Save a transition"""
         Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'action', 'next_state', 'reward','done'))
         self.memory.append(Transition(*args))
 
     def sample(self, batch_size):
@@ -70,12 +66,24 @@ class DQN(nn.Module):
     def forward(self, x):
         y1 = torch.tanh(self.layer1(x))
         y2 = torch.tanh(self.layer2(y1))
+        # y1 = F.tanh(self.layer1(x))
+        # y2 = F.tanh(self.layer2(y1))
         output = self.layer3(y2)
         
         return output
-  
+
+def update_epsilon(epsilon, eps_min, eps_delta): 
+    
+    if epsilon >= eps_min: 
+        epsilon = epsilon - eps_delta 
+    else: 
+        epsilon = eps_min 
+    
+    return epsilon 
+    
+    
 ## Define a function to select an epsilon-greedy action using a soft update rule 
-def select_action(env, q_net, state, EPS_START, EPS_END, EPS_DECAY):
+def select_action(env, q_net, state, epsilon):
     
     """  
     Class for defining the neural networks used for the Q-Network and the Target Network 
@@ -86,12 +94,8 @@ def select_action(env, q_net, state, EPS_START, EPS_END, EPS_DECAY):
     Returns:
         The output of the Q-Network which is the Q-values corresponsing to an input state to the Q-Network and all possible actions that could be taken from that state  
     """
-    steps_done = 0 
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
+
+    if random.random() > epsilon:
         with torch.no_grad():
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
@@ -103,7 +107,7 @@ def select_action(env, q_net, state, EPS_START, EPS_END, EPS_DECAY):
 
 
 ## The following function performs a single step of the optimization for the q_network
-def optimize_model(memory, BATCH_SIZE, q_net, target_net, gamma, optimizer):
+def optimize_Q(memory, BATCH_SIZE, q_net, target_net, gamma, optimizer):
     
     """  
     Optimizes the Q-Network 
@@ -121,7 +125,7 @@ def optimize_model(memory, BATCH_SIZE, q_net, target_net, gamma, optimizer):
     if len(memory) < BATCH_SIZE:
         return
     Transition = namedtuple('Transition',
-                ('state', 'action', 'next_state', 'reward'))
+                ('state', 'action', 'next_state', 'reward','done'))
     transitions = memory.sample(BATCH_SIZE)
     # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
     # detailed explanation). This converts batch-array of Transitions
@@ -157,59 +161,28 @@ def optimize_model(memory, BATCH_SIZE, q_net, target_net, gamma, optimizer):
     with torch.no_grad():
         next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
     # Compute the expected Q values
-    expected_state_action_values = (next_state_values * gamma) + reward_batch
+    #if not batch.done:
+        expected_state_action_values = (1-int(batch.done ==True))*(next_state_values * gamma) + reward_batch
+    # else: 
+    #     expected_state_action_values = reward_batch
+    
 
-    # Compute Huber loss
-    criterion = nn.SmoothL1Loss()
+    # Compute loss
+    #criterion = nn.SmoothL1Loss()
+    criterion = nn.MSELoss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-
-    # Optimize the model
-    optimizer.zero_grad()
-    loss.backward()
+    
+    # Optimize the Q-Network 
+    optimizer.zero_grad() #sets the gradients of the network parameters to zero before doing a backpropagation
+    loss.backward() # performs a backpropagation of the loss w.r.t the network parameters
+   
     # In-place gradient clipping
     torch.nn.utils.clip_grad_value_(q_net.parameters(), 100)
     optimizer.step()
+    return loss
 
 
-def optimal_policy(env, q_net):
-    
-    # Initialize simulation
-    s = env.reset()
-    
-    # Define a policy array
-    policy = {
-     's': [],
-     'a': [],
-     }
 
-
-    # Simulate until episode is done
-    done = False
-    
-    while not done:
-        
-        s = torch.Tensor(s)
-        Q = q_net(s).detach().numpy()  
-        a = np.argmax(Q)
-        (s, r, done) = env.step(a)
-        policy['s'].append(s)
-        policy['a'].append(a)
-
-       
-    return policy 
-
-def map_state_to_number(env, state, n_theta, n_thetadot):
-    # Get theta - wrapping to [-pi, pi) - and thetadot
-    theta = ((state[0] + np.pi) % (2 * np.pi)) - np.pi
-    thetadot = state[1]
-    # Convert to i, j coordinates
-    i = (n_theta * (theta + np.pi)) // (2 * np.pi)
-    j = (n_thetadot * (thetadot + env.max_thetadot)) // (2 * env.max_thetadot)
-    # Clamp i, j coordinates
-    i = max(0, min(n_theta - 1, i))
-    j = max(0, min(n_thetadot - 1, j))
-    # Convert to state
-    return int(i * n_thetadot + j)
 
         
             

@@ -11,7 +11,6 @@ import torch
 import random
 import matplotlib
 import matplotlib.pyplot as plt
-from helpers import TD_zero 
 
 
 def plot_learning_curve(episode_num,output_return):
@@ -78,34 +77,50 @@ def plot_example_traj_pendulum(q_net, env):
     plt.tight_layout()
     plt.savefig('figures/example_trajectory.png')
     
-    
- 
-def plot_state_value_function(env, q_net): 
-    
-    """
-    Plots the leanred state-value function for the trained agent
-    :param q_net: trained Q-Network 
-    :param env: environment object
-    :return: figure
-    """   
-    
-    q_value = np.zeros((60,12))
-    theta = np.arange(-3,3.5,0.5)
-    theta_dot = np.arange(-15,15.5,0.5)
 
-    for i in range(60):
-        for j in range(12): 
-            x = np.array([theta_dot[i], theta[j]])
-            s = env._x_to_s(x)
-            s = torch.Tensor(s)
-            q_max = max(q_net(s).detach().numpy())
-            q_value [i][j] = q_max        
+def plot_state_value_function(env, policy, q_net):
+    theta = np.linspace(-np.pi, np.pi,100)
+    theta_dot = np.linspace(-env.max_thetadot,env.max_thetadot,100)
+    x_axis, y_axis = np.meshgrid(theta, theta_dot)
     
-    print(q_value)
-    plt.pcolor(theta, theta_dot, q_value, cmap='RdBu')
-    plt.title("State value function for the trained agent")
-    plt.colorbar()     
-    plt.xlabel("theta")
-    plt.ylabel("theta dot")
+    policy_array = np.zeros_like(x_axis)
+    for i in range(len(theta)):
+        for j in range(len(theta)):
+            s = np.array((x_axis[i,j], y_axis[i,j]))
+            policy_array[i,j] = policy(s)
+      
+    V_array = np.zeros_like(x_axis)
+    
+    for i in range(len(theta)):
+        for j in range(len(theta)):
+            s = np.array((x_axis[i,j], y_axis[i,j]))
+            V_array[i,j] = torch.max(q_net(torch.from_numpy(s).float())).item()
+    
+    plt.figure(plt.gcf().number+1)
+    plt.pcolor(x_axis, y_axis, V_array)
+    plt.xlabel('theta')
+    plt.ylabel('theta dot')
+    plt.colorbar()
     plt.savefig('figures/state_value_function.png')
 
+def plot_ablation_study_comparison(output_return_total, episode_num_total):
+    """
+    Plots the learning curve for all four cases in the ablation study 
+    :param episode_num_total: number of episodes
+    :param output_return_total: the return from all four cases 
+    :return: figure
+    """
+    
+    fig, ax = plt.subplots(1)
+    fig.suptitle('Ablation study learning curve comparison')
+    ax.plot(episode_num_total,output_return_total[0], label = "with replay, with target")
+    ax.plot(episode_num_total,output_return_total[1], label = "with replay, without target")
+    ax.plot(episode_num_total,output_return_total[2], label = "without replay, with target" )
+    ax.plot(episode_num_total,output_return_total[3], label = "without replay, without target" )
+
+    plt.xlabel("Number of episodes")
+    plt.ylabel("Return") 
+    plt.legend()
+    plt.savefig("figures/ablation_study_learning_curve_comparison.png")
+    
+    
